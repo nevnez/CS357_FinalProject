@@ -23,6 +23,8 @@ import Data.Char (toLower)
 import Data.List (isInfixOf)
 import Data.Maybe (fromMaybe)
 import System.Directory (doesFileExist)
+import GHC.IO.Handle (hSetBuffering, BufferMode (NoBuffering))
+import GHC.IO.FD (stdout)
 
 -- =========== Admin list ============
 -- add username to grant admin access.

@@ -85,5 +85,5 @@ displayMenu isAdmin = do
 
 promptUser :: String -> IO String
 promptUser msg = do
-  putStr (msg ++ " ")
+  putStr ("\n" ++ msg ++ "\n> ")
   getLine
