@@ -1,31 +1,34 @@
--- app/Main.hs
+-- Main.hs
 -- Entry point: main loop wiring the scraper, backend, and UI together.
+-- ====================================================================
+  -- DO NOT PUSH .gitignore
+-- ====================================================================  
 
 module Main where
 
 import Types
-import Scraper(scrapeAll)
+import Scraper (loadFromCache, refreshAll)
 import Search (search)
-import Types
-import Filter(filterByTags, filterPaid, filterRemote)
-import Recommend(recommend, defaultProfile)
-import Deadline(sortByDeadline, upcomingDeadlines)
+import Filter (filterByTags, filterPaid, filterRemote)
+import Recommend (recommend, defaultProfile)
+import Deadline (sortByDeadline, upcomingDeadlines)
 import Display
-
 import Data.Time (getCurrentTime, utctDay, Day)
 
 main :: IO ()
 main = do
-  putStrLn "Fetching opportunities..."
-  opps <- scrapeAll
+  putStrLn "╔══════════════════════════════════════╗"
+  putStrLn "║   WiC Opportunities CLI              ║"
+  putStrLn "║   UNM Women in Computing             ║"
+  putStrLn "╚══════════════════════════════════════╝"
+  putStr   "  Enter your name: "
+  name <- getLine
+  opps <- loadFromCache
   today <- utctDay <$> getCurrentTime
-
-  -- Use a default profile until real user profiles are implemented.
-  let profile = defaultProfile "Guest"
-
+  let profile = defaultProfile name
   loop today opps profile
 
--- Main loop.
+-- Main REPL loop.
 loop :: Day -> [Opportunity] -> UserProfile -> IO ()
 loop today opps profile = do
   displayMenu
@@ -42,9 +45,8 @@ loop today opps profile = do
       loop today opps profile
 
     "3" -> do
-      putStrLn "Available tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
-      tagStr <- promptUser "Enter tag (e.g. Remote):"
-      -- TODO: parse tagStr into a Tag value properly
+      putStrLn "Tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
+      tagStr <- promptUser "Enter tag:"
       putStrLn ("(Tag filtering for '" ++ tagStr ++ "' coming soon!)")
       loop today opps profile
 
@@ -61,21 +63,19 @@ loop today opps profile = do
       loop today opps profile
 
     "6" -> do
-      putStrLn "Re-scraping..."
-      fresh <- scrapeAll
+      fresh <- refreshAll
       loop today fresh profile
 
     "0" -> putStrLn "Goodbye!"
 
-    _   -> do
+    _ -> do
       putStrLn "Invalid option, try again."
       loop today opps profile
 
--- | A blank query (matches everything).
 emptyQuery :: SearchQuery
 emptyQuery = SearchQuery
   { queryKeyword = Nothing
-  , queryTags    = []
-  , queryType    = Nothing
-  , queryRemote  = Nothing
+  , queryTags = []
+  , queryType = Nothing
+  , queryRemote = Nothing
   }
