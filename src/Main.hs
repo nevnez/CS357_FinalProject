@@ -25,7 +25,7 @@ main = do
 
   loop today opps profile
 
--- | Main REPL loop.
+-- Main loop.
 loop :: Day -> [Opportunity] -> UserProfile -> IO ()
 loop today opps profile = do
   displayMenu
