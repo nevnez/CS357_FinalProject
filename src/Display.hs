@@ -46,25 +46,42 @@ displayDeadlineBadge status opp =
                 Future -> "[Future]"
   in "Deadline: " ++ maybe "N/A" show (oppDeadline opp) ++ " " ++ label
 
--- ── Main menu ──────────────────────────────────────────────────────────────
+-- Main menu
 
-displayMenu :: IO ()
-displayMenu = do
+displayMenu :: Bool -> IO ()
+displayMenu isAdmin = do
   putStrLn ""
-  putStrLn "╔══════════════════════════════════════╗"
-  putStrLn "║  WiC Opportunities CLI               ║"
-  putStrLn "╠══════════════════════════════════════╣"
-  putStrLn "║  1. Browse all opportunities         ║"
-  putStrLn "║  2. Search by keyword                ║"
-  putStrLn "║  3. Filter by tag                    ║"
-  putStrLn "║  4. View upcoming deadlines          ║"
-  putStrLn "║  5. Recommendations for me           ║"
-  putStrLn "║  6. Refresh (fetch live data)        ║"
-  putStrLn "║  0. Quit                             ║"
-  putStrLn "╚══════════════════════════════════════╝"
-  putStr   "  Choose an option: "
+  if isAdmin
+    then do
+      putStrLn "╔══════════════════════════════════════╗"
+      putStrLn "║  WiC Opportunities CLI  [ADMIN]      ║"
+      putStrLn "╠══════════════════════════════════════╣"
+      putStrLn "║  1. Browse all opportunities         ║"
+      putStrLn "║  2. Search by keyword                ║"
+      putStrLn "║  3. Filter by tag                    ║"
+      putStrLn "║  4. View upcoming deadlines          ║"
+      putStrLn "║  5. Recommendations for me           ║"
+      putStrLn "║  6. Refresh (fetch live data)        ║"
+      putStrLn "║  7. Add WiC curated job [ADMIN]      ║"
+      putStrLn "║  8. Remove WiC curated job [ADMIN]   ║"
+      putStrLn "║  0. Quit                             ║"
+      putStrLn "╚══════════════════════════════════════╝"
+      putStr "  Choose an option: "
+    else do
+      putStrLn "╔══════════════════════════════════════╗"
+      putStrLn "║  WiC Opportunities CLI               ║"
+      putStrLn "╠══════════════════════════════════════╣"
+      putStrLn "║  1. Browse all opportunities         ║"
+      putStrLn "║  2. Search by keyword                ║"
+      putStrLn "║  3. Filter by tag                    ║"
+      putStrLn "║  4. View upcoming deadlines          ║"
+      putStrLn "║  5. Recommendations for me           ║"
+      putStrLn "║  6. Refresh (fetch live data)        ║"
+      putStrLn "║  0. Quit                             ║"
+      putStrLn "╚══════════════════════════════════════╝"
+      putStr "  Choose an option: "
 
--- ── Generic prompt ─────────────────────────────────────────────────────────
+-- Generic prompt
 
 promptUser :: String -> IO String
 promptUser msg = do
