@@ -12,6 +12,7 @@ module Display
 import Types
 import Deadline (DeadlineStatus(..), deadlineStatus)
 import Data.Time (Day)
+import System.IO (hFlush, stdout)
 
 -- Individual opportunity card 
 
@@ -86,4 +87,5 @@ displayMenu isAdmin = do
 promptUser :: String -> IO String
 promptUser msg = do
   putStr ("\n" ++ msg ++ "\n> ")
+  hFlush stdout
   getLine

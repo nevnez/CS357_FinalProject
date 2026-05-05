@@ -23,8 +23,9 @@ import Data.Char (toLower)
 import Data.List (isInfixOf)
 import Data.Maybe (fromMaybe)
 import System.Directory (doesFileExist)
+import System.IO (hFlush, stdout)
 import GHC.IO.Handle (hSetBuffering, BufferMode (NoBuffering))
-import GHC.IO.FD (stdout)
+import System.IO (hFlush, stdout)
 
 -- =========== Admin list ============
 -- add username to grant admin access.
@@ -48,7 +49,9 @@ main = do
   putStrLn "║   WiC Opportunities CLI              ║"
   putStrLn "║   UNM Women in Computing             ║"
   putStrLn "╚══════════════════════════════════════╝"
-  putStr   "  Enter your name: "
+  putStrLn "  Enter your name: "
+  putStr   "> "
+  hFlush stdout
   name <- getLine
   opps <- loadFromCache
   today <- utctDay <$> getCurrentTime
