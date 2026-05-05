@@ -42,14 +42,15 @@ isAdmin name = map toLower name `elem` map (map toLower) admins
 wicJobsFile :: FilePath
 wicJobsFile = "wic-jobs.json"
 
+-- MAIN
 
 main :: IO ()
 main = do
   putStrLn "╔══════════════════════════════════════╗"
-  putStrLn "║   WiC Opportunities CLI              ║"
-  putStrLn "║   UNM Women in Computing             ║"
+  putStrLn "║        WiC Opportunities CLI         ║"
+  putStrLn "║        UNM Women in Computing        ║"
   putStrLn "╚══════════════════════════════════════╝"
-  putStrLn "  Enter your name: "
+  putStrLn "  Enter your name or ADMIN key: "
   putStr   "> "
   hFlush stdout
   name <- getLine
@@ -65,8 +66,8 @@ main = do
       userLoop today opps profile
 
 -- Main REPL loop for USERS
-userLoop :: Day -> [Opportunity] -> UserProfile -> IO ()
-userLoop today opps profile = do
+userLoop :: Day -> [Opportunity] -> UserProfile -> CommentMap -> IO ()
+userLoop today opps profile cmap = do
   displayMenu False
   choice <- getLine
   case choice of
@@ -84,25 +85,32 @@ userLoop today opps profile = do
       putStrLn "Tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
       tagStr <- promptUser "Enter tag:"
       case parseTag tagStr of
-        Nothing -> putStr ("Unknown tag: " ++ tagStr)
+        Nothing -> putStrln ("Unknown tag: " ++ tagStr)
         Just tag -> displayList today (filterByTags [tag] opps)
-      userLoop today opps profile  
+      userLoop today opps profile cmap
 
     "4" -> do
       daysStr <- promptUser "Show deadlines within how many days? (default 30):"
       let n = if null daysStr then 30 else read daysStr
-      let upcoming = upcomingDeadlines today n (sortByDeadline opps)
-      displayList today upcoming
-      userLoop today opps profile
+      displayList today (upcomingDeadlines today n (sortByDeadline opps))
+      userLoop today opps profile cmap
 
     "5" -> do
       let ranked = recommend profile opps
-      displayList today ranked
-      userLoop today opps profile
+      displayList today (recommend profile opps)
+      userLoop today opps profile cmap
 
     "6" -> do
       fresh <- refreshAll
-      userLoop today fresh profile
+      userLoop today fresh profile cmap
+
+    "c" -> do
+      cmap' <- handleComments (map toLower choice) oops (userName profile) cmap
+      userLoop today oops profile cmap'
+
+    "C" -> do
+      cmap' <- handleComments "c" opps (userName profile) cmap 
+      userLoop today opps profile cmap'
 
     "0" -> putStrLn "Goodbye!"
 
@@ -113,7 +121,7 @@ userLoop today opps profile = do
 -- Main REPL loop for ADMIN
 
 adminLoop :: Day -> [Opportunity] -> UserProfile -> IO ()
-adminLoop today opps profile = do
+adminLoop today opps profile cmap = do
   displayMenu True
   choice <- getLine
   case choice of
@@ -125,7 +133,7 @@ adminLoop today opps profile = do
       kw <- promptUser "Enter keyword:"
       let results = search (emptyQuery { queryKeyword = Just kw }) opps
       displayList today results
-      adminLoop today opps profile
+      adminLoop today opps profile cmap
  
     "3" -> do
       putStrLn "Tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
@@ -133,35 +141,75 @@ adminLoop today opps profile = do
       case parseTag tagStr of
         Nothing  -> putStrLn ("Unknown tag: " ++ tagStr)
         Just tag -> displayList today (filterByTags [tag] opps)
-      adminLoop today opps profile
+      adminLoop today opps profile cmap
  
     "4" -> do
       daysStr <- promptUser "Show deadlines within how many days? (default 30):"
       let n = if null daysStr then 30 else read daysStr
       displayList today (upcomingDeadlines today n (sortByDeadline opps))
-      adminLoop today opps profile
+      adminLoop today opps profile cmap
  
     "5" -> do
       displayList today (recommend profile opps)
-      adminLoop today opps profile
+      adminLoop today opps profile cmap
  
     "6" -> do
       fresh <- refreshAll
-      adminLoop today fresh profile
+      adminLoop today fresh profile cmap
+
+    "c" -> do
+      cmap' <- handleComments "c" opps (userName profile) cmap
+      adminLoop today opps profile cmap'
+
+    "C" -> do
+      cmap' <- handleComments "c" opps (userName profile) cmap
+      adminLoop today opps profile cmap'  
  
     "7" -> do
       fresh <- addWicJob opps
-      adminLoop today fresh profile
+      adminLoop today fresh profile cmap
  
     "8" -> do
       fresh <- removeWicJob opps
-      adminLoop today fresh profile
+      adminLoop today fresh profile cmap
  
     "0" -> putStrLn "Goodbye!"
  
     _ -> do
       putStrLn "Invalid option."
-      adminLoop today opps profile
+      adminLoop today opps profile cmap
+
+-- Comments handler
+handleComments :: String -> [Opportunity] -> String -> CommentMap -> IO CommentMap
+handleComments _ opps userName cmap = do
+  idStr <- promptUser "Enter job ID to view/add comments:"
+  case reads idStr of 
+    [(jobId, "")] ->
+      case find (\o -> oppId o == jobId) opps of
+        Nothing -> do
+          putStrLn("No job found with ID " ++ idStr)
+          return cmap
+        Just opp -> do
+          putStrLn $ "\n" ++ replicate 60 '-'
+          putStrLn $ "Comments for : " ++ oppTile opp ++ "@" ++ oppCompany opp
+          putStrLn $ replicate 60 '-'
+          let comments = getCommentsFor jobId cmap
+          displayComments comments
+          putStrLn " A. add a comment"
+          putStrLn " B. Back to menu"
+          putStr " >"
+          hFlush stdout
+          action <- getLine
+          case map toLower action of
+            "a" -> do
+              text <- promptUser "Your comment:"
+              cmap' <- addComment jobId userName text cmap
+              putStrLn "[Comments] Comment added!"
+              return cmap'
+              _ -> return cmap
+    _ -> do
+      putStrLn "Invalid ID."
+      return cmap           
 
 -- Admin Actions
 
