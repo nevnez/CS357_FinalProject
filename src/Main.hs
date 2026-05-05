@@ -83,8 +83,10 @@ userLoop today opps profile = do
     "3" -> do
       putStrLn "Tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
       tagStr <- promptUser "Enter tag:"
-      putStrLn ("(Tag filtering for '" ++ tagStr ++ "' coming soon!)")
-      userLoop today opps profile
+      case parseTag tagStr of
+        Nothing -> putStr ("Unknown tag: " ++ tagStr)
+        Just tag -> displayList today (filterByTags [tag] opps)
+      userLoop today opps profile  
 
     "4" -> do
       daysStr <- promptUser "Show deadlines within how many days? (default 30):"
