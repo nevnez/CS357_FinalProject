@@ -4,6 +4,7 @@
 -- USAJobs (federal jobs in NM, requires API key in config.json).
 -- Also loads WiC admin-curated jobs from wic-jobs.json.
 -- Can't get USAJobs working. Running into TLS issues with WSL's network stack.
+-- TODO: Try getting USAJobs to work. Not able to scrape. Pressing 6 will break program bc USAJobs.
 
 module Scraper
   ( scrapeAll
