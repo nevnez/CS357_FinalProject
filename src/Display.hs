@@ -63,6 +63,7 @@ displayMenu isAdmin = do
       putStrLn "║  4. View upcoming deadlines          ║"
       putStrLn "║  5. Recommendations for me           ║"
       putStrLn "║  6. Refresh (fetch live data)        ║"
+      putStrLn "║  C. Comments on job                  ║"
       putStrLn "║  7. Add WiC curated job [ADMIN]      ║"
       putStrLn "║  8. Remove WiC curated job [ADMIN]   ║"
       putStrLn "║  0. Quit                             ║"
@@ -78,9 +79,12 @@ displayMenu isAdmin = do
       putStrLn "║  4. View upcoming deadlines          ║"
       putStrLn "║  5. Recommendations for me           ║"
       putStrLn "║  6. Refresh (fetch live data)        ║"
+      putStrLn "║  C. Comments on a job                ║"
       putStrLn "║  0. Quit                             ║"
       putStrLn "╚══════════════════════════════════════╝"
-      putStr "  Choose an option: "
+  putStr "  Choose an option: "
+  hFlush stdout
+
 
 -- Generic prompt
 

@@ -20,12 +20,11 @@ import Data.Time (getCurrentTime, utctDay, Day)
 import Data.Aeson (eitherDecodeFileStrict, encodeFile, object, (.=), Value(..))
 import Data.Aeson.Types (parseMaybe, (.:))
 import Data.Char (toLower)
-import Data.List (isInfixOf)
 import Data.Maybe (fromMaybe)
 import System.Directory (doesFileExist)
 import System.IO (hFlush, stdout)
-import GHC.IO.Handle (hSetBuffering, BufferMode (NoBuffering))
-import System.IO (hFlush, stdout)
+import Comments
+import Data.List (find, isInfixOf)
 
 -- =========== Admin list ============
 -- add username to grant admin access.
@@ -56,14 +55,15 @@ main = do
   name <- getLine
   opps <- loadFromCache
   today <- utctDay <$> getCurrentTime
+  cmap <- loadComments
   let profile = defaultProfile name
   if isAdmin name
     then do
       putStrLn ("  Welcome, " ++ name ++ "! [ADMIN]")
-      adminLoop today opps profile
+      adminLoop today opps profile cmap
     else do
       putStrLn ("  Welcome, " ++ name ++ "!")
-      userLoop today opps profile
+      userLoop today opps profile cmap
 
 -- Main REPL loop for USERS
 userLoop :: Day -> [Opportunity] -> UserProfile -> CommentMap -> IO ()
@@ -73,19 +73,19 @@ userLoop today opps profile cmap = do
   case choice of
     "1" -> do
       displayList today opps
-      userLoop today opps profile
+      userLoop today opps profile cmap
 
     "2" -> do
       kw <- promptUser "Enter keyword:"
       let results = search (emptyQuery { queryKeyword = Just kw }) opps
       displayList today results
-      userLoop today opps profile
+      userLoop today opps profile cmap
 
     "3" -> do
       putStrLn "Tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
       tagStr <- promptUser "Enter tag:"
       case parseTag tagStr of
-        Nothing -> putStrln ("Unknown tag: " ++ tagStr)
+        Nothing -> putStrLn ("Unknown tag: " ++ tagStr)
         Just tag -> displayList today (filterByTags [tag] opps)
       userLoop today opps profile cmap
 
@@ -105,8 +105,8 @@ userLoop today opps profile cmap = do
       userLoop today fresh profile cmap
 
     "c" -> do
-      cmap' <- handleComments (map toLower choice) oops (userName profile) cmap
-      userLoop today oops profile cmap'
+      cmap' <- handleComments (map toLower choice) opps (userName profile) cmap
+      userLoop today opps profile cmap'
 
     "C" -> do
       cmap' <- handleComments "c" opps (userName profile) cmap 
@@ -116,18 +116,18 @@ userLoop today opps profile cmap = do
 
     _ -> do
       putStrLn "Invalid option, try again."
-      userLoop today opps profile
+      userLoop today opps profile cmap
 
 -- Main REPL loop for ADMIN
 
-adminLoop :: Day -> [Opportunity] -> UserProfile -> IO ()
+adminLoop :: Day -> [Opportunity] -> UserProfile -> CommentMap -> IO ()
 adminLoop today opps profile cmap = do
   displayMenu True
   choice <- getLine
   case choice of
     "1" -> do
       displayList today opps
-      adminLoop today opps profile
+      adminLoop today opps profile cmap
  
     "2" -> do
       kw <- promptUser "Enter keyword:"
@@ -191,7 +191,7 @@ handleComments _ opps userName cmap = do
           return cmap
         Just opp -> do
           putStrLn $ "\n" ++ replicate 60 '-'
-          putStrLn $ "Comments for : " ++ oppTile opp ++ "@" ++ oppCompany opp
+          putStrLn $ "Comments for : " ++ oppTitle opp ++ "@" ++ oppCompany opp
           putStrLn $ replicate 60 '-'
           let comments = getCommentsFor jobId cmap
           displayComments comments
@@ -206,7 +206,7 @@ handleComments _ opps userName cmap = do
               cmap' <- addComment jobId userName text cmap
               putStrLn "[Comments] Comment added!"
               return cmap'
-              _ -> return cmap
+            _ -> return cmap
     _ -> do
       putStrLn "Invalid ID."
       return cmap           
