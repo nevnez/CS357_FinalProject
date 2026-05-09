@@ -15,6 +15,11 @@ module Scraper
 
 import Types
 import Data.Time (Day, fromGregorian)
+import Text.HTML.Scalpel
+import Network.HTTP.Conduit (simpleHttp)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Text.Encoding as TE
+import Data.Maybe (fromMaybe)
 
 -- | Scrape all configured sources and combine results.
 -- TODO: run these concurrently with `async` for speed.
@@ -32,8 +37,37 @@ scrapeAll = do
 --   3. Map results into [Opportunity]
 scrapeLinkedIn :: IO [Opportunity]
 scrapeLinkedIn = do
-  putStrLn "[Scraper] LinkedIn: TODO - replace with real scraper"
-  return sampleOpportunities
+  let url = "https://www.linkedin.com/jobs/search?keywords=intern"
+  -- scrapeURL does the fetching AND the parsing in one line (best-effort)
+  maybeTriples <- scrapeURL url $ do
+    let pattern1 = chroots "li.result-card" $ do
+          title <- text ".result-card__title"
+          company <- text ".result-card__subtitle"
+          link <- attr "href" "a.result-card__full-card-link"
+          return (title, company, link)
+
+        pattern2 = chroots "div.base-card" $ do
+          title <- text ".base-search-card__title"
+          company <- text ".base-search-card__subtitle"
+          link <- attr "href" "a.base-card__full-link"
+          return (title, company, link)
+
+    pattern1 <|> pattern2
+
+  let triples = fromMaybe [] maybeTriples
+      toOpps = zipWith (\i (t, c, u) -> Opportunity
+        { oppId = i
+        , oppTitle = t
+        , oppCompany = c
+        , oppDescription = ""
+        , oppTags = []
+        , oppType = Internship
+        , oppDeadline = Nothing
+        , oppURL = u
+        , oppSource = "LinkedIn"
+        }) [1 :: Int ..] triples
+
+  return toOpps
 
 -- | Scrape Handshake for student-focused opportunities.
 -- TODO: Handshake requires login — consider using saved session cookies
@@ -90,3 +124,4 @@ sampleOpportunities =
       , oppSource      = "Wellfound"
       }
   ]
+
