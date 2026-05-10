@@ -30,3 +30,19 @@ executable wic-cli
     , Comments
   ghc-options: -threaded
   default-language: Haskell2010
+
+executable wic-ui
+  import: shared-deps
+  hs-source-dirs: src
+  main-is: MainUI.hs
+  other-modules:
+      Types
+    , Scraper
+    , Search
+    , Filter
+    , Recommend
+    , Deadline
+    , Comments
+    , UI
+  ghc-options: -threaded
+  default-language: Haskell2010
