@@ -68,7 +68,6 @@ displayMenu isAdmin = do
       putStrLn "║  8. Remove WiC curated job [ADMIN]   ║"
       putStrLn "║  0. Quit                             ║"
       putStrLn "╚══════════════════════════════════════╝"
-      -- TODO: Fix output (outputing twice)
       putStr "  Choose an option: "
     else do
       putStrLn "╔══════════════════════════════════════╗"
