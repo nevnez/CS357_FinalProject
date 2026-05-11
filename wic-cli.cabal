@@ -28,6 +28,7 @@ executable wic-cli
     , Deadline
     , Display
     , Comments
+    , Preferences
   ghc-options: -threaded
   default-language: Haskell2010
 
@@ -43,6 +44,7 @@ executable wic-ui
     , Recommend
     , Deadline
     , Comments
+    , Preferences
     , UI
   ghc-options: -threaded
   default-language: Haskell2010

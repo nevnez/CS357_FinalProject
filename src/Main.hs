@@ -25,6 +25,7 @@ import System.Directory (doesFileExist)
 import System.IO (hFlush, stdout)
 import Comments
 import Data.List (find, isInfixOf)
+import Preferences
 
 -- =========== Admin list ============
 -- add username to grant admin access.
@@ -96,9 +97,24 @@ userLoop today opps profile cmap = do
       userLoop today opps profile cmap
 
     "5" -> do
-      let ranked = recommend profile opps
-      displayList today (recommend profile opps)
-      userLoop today opps profile cmap
+      pmap <- loadAllPrefs
+      prefs <- case getPrefsFor (userName profile) pmap of
+        Just p -> do
+          putStrLn ("Showing results for your saves preferences.")
+          return p
+        Nothing -> do
+          putStrLn "No preferences saved yet! Let's set them up."
+          p <- promptForPrefs
+          _ <- savePrefsFor (userName profile) p pmap 
+          return p 
+
+      let kwResults = concatMap (\kw -> search (emptyQuery {queryKeyword = Just kw}) opps) (prefKeywords prefs)   
+          tagResults = concatMap (\tag -> filterByTags [tag] opps) (prefTags prefs)
+          combined = kwResults ++ filter (`notElem` kwResults) tagResults
+      putStrLn ("\n Found " ++ show (length combined) ++ " recommendations.")
+      displayList today combined
+      userLoop today opps profile cmap  
+
 
     "6" -> do
       fresh <- refreshAll
@@ -150,8 +166,23 @@ adminLoop today opps profile cmap = do
       adminLoop today opps profile cmap
  
     "5" -> do
-      displayList today (recommend profile opps)
-      adminLoop today opps profile cmap
+      pmap <- loadAllPrefs
+      prefs <- case getPrefsFor (userName profile) pmap of
+        Just p -> do
+          putStrLn ("Showing results for your saves preferences.")
+          return p
+        Nothing -> do
+          putStrLn "No preferences saved yet! Let's set them up."
+          p <- promptForPrefs
+          _ <- savePrefsFor (userName profile) p pmap 
+          return p 
+
+      let kwResults = concatMap (\kw -> search (emptyQuery {queryKeyword = Just kw}) opps) (prefKeywords prefs)   
+          tagResults = concatMap (\tag -> filterByTags [tag] opps) (prefTags prefs)
+          combined = kwResults ++ filter (`notElem` kwResults) tagResults
+      putStrLn ("\n Found " ++ show (length combined) ++ " recommendations.")
+      displayList today combined
+      userLoop today opps profile cmap  
  
     "6" -> do
       fresh <- refreshAll
