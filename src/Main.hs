@@ -189,12 +189,6 @@ adminLoop today opps profile cmap = do
       adminLoop today opps profile cmap
  
     "4" -> do
-      daysStr <- promptUser "Show deadlines within how many days? (default 30):"
-      let n = if null daysStr then 30 else read daysStr
-      displayList today (upcomingDeadlines today n (sortByDeadline opps))
-      adminLoop today opps profile cmap
- 
-    "5" -> do
       pmap <- loadAllPrefs
       prefs <- case getPrefsFor (userName profile) pmap of
         Just p -> do
@@ -215,7 +209,7 @@ adminLoop today opps profile cmap = do
       displayList today combined
       userLoop today opps profile cmap
       
-    "6" -> do
+    "5" -> do
       fresh <- refreshAll
       adminLoop today fresh profile cmap
 
@@ -227,7 +221,7 @@ adminLoop today opps profile cmap = do
       cmap' <- handleComments "c" opps (userName profile) cmap
       adminLoop today opps profile cmap'  
  
-    "7" -> do
+    "6" -> do
       title <- promptUser "Job title:"
       company <- promptUser "Company:"
       desc <- promptUser "Description:"
@@ -243,7 +237,7 @@ adminLoop today opps profile cmap = do
       fresh <- addWicJob opps title company desc url source tags oppType
       adminLoop today fresh profile cmap  
  
-    "8" -> do
+    "7" -> do
       let wicJobs = filter oppIsWicPick opps
       if null wicJobs
         then putStrLn "No WiC curated jobs to remove."
@@ -290,76 +284,6 @@ handleComments _ opps userName cmap = do
     _ -> do
       putStrLn "Invalid ID."
       return cmap           
-
--- Admin Actions
-
--- addWicJob :: [Opportunity] -> IO [Opportunity]
--- addWicJob opps = do
---   putStrLn "\n── Add WiC Curated Job ──"
---   title <- promptUser "Job title:"
---   company <- promptUser "Company:"
---   desc <- promptUser "Description:"
---   url <- promptUser "URL:"
---   source <- promptUser "Source (e.g. LinkedIn, Handshake):"
---   putStrLn "Tags (comma separated): Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
---   tagStr <- promptUser "Tags:"
---   putStrLn "Type: 1=Internship, 2=Job, 3=ResearchPosition"
---   typeStr <- promptUser "Type:"
- 
---   let tags = parseTags tagStr
---       oppType = case typeStr of
---                   "1" -> Internship
---                   "3" -> ResearchPosition
---                   _   -> Job
---       newOpp = Opportunity
---         { oppId = length opps + 1
---         , oppTitle = title
---         , oppCompany = company
---         , oppDescription = desc
---         , oppTags = tags
---         , oppType = oppType
---         , oppDeadline = Nothing
---         , oppURL = url
---         , oppSource = source
---         , oppIsWicPick = True
---         }
- 
---   -- Load existing WiC jobs, append, save
---   existing <- loadWicJobs
---   let updated = existing ++ [newOpp]
---   encodeFile wicJobsFile updated
---   putStrLn ("[Admin] Added '" ++ title ++ "' as a WiC Pick!")
---   return (opps ++ [newOpp])
- 
--- removeWicJob :: [Opportunity] -> IO [Opportunity]
--- removeWicJob opps = do
---   putStrLn "\n── Remove WiC Curated Job ──"
---   let wicJobs = filter oppIsWicPick opps
---   if null wicJobs
---     then do
---       putStrLn "No WiC curated jobs to remove."
---       return opps
---     else do
---       putStrLn "Current WiC Picks:"
---       mapM_ (\o -> putStrLn ("  " ++ show (oppId o) ++ ". " ++ oppTitle o ++ " @ " ++ oppCompany o)) wicJobs
---       idStr <- promptUser "Enter ID to remove:"
---       let targetId = read idStr :: Int
---           updated = filter (\o -> not (oppIsWicPick o && oppId o == targetId)) opps
---           wicOnly = filter oppIsWicPick updated
---       encodeFile wicJobsFile wicOnly
---       putStrLn "[Admin] Job removed."
---       return updated
- 
--- loadWicJobs :: IO [Opportunity]
--- loadWicJobs = do
---   exists <- doesFileExist wicJobsFile
---   if not exists
---     then return []
---     else do
---       result <- eitherDecodeFileStrict wicJobsFile
---       case result of
---         Left  _ -> return []
---         Right opps -> return opps
 
 -- Helpers
  
