@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
- 
+
 -- UI.hs  
 -- Enhanced beautiful pink-themed terminal UI for WiC Opportunities
 -- FIXED: Box alignment + removed upcoming deadlines option
- 
+
 module UI (runUI) where
- 
+
 import Types
 import Scraper (loadFromCache, refreshAll)
 import Search (search)
@@ -13,19 +13,20 @@ import Filter (filterByTags)
 import Recommend (recommend, defaultProfile)
 import Deadline (sortByDeadline, upcomingDeadlines, deadlineStatus, DeadlineStatus(..))
 import Comments
+import Preferences
 import Data.Time (getCurrentTime, utctDay, Day)
 import Data.Maybe (fromMaybe)
-import Data.List (find, intercalate)
+import Data.List (find, intercalate, isInfixOf, sortBy)
 import Data.Char (toLower)
 import System.IO (hFlush, stdout)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Prelude hiding (truncate)
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- ANSI COLOR CODES
 -- ══════════════════════════════════════════════════════════════
- 
+
 pink, hotPink, purple, cyan, yellow, green, white, gray, red, bold, reset :: String
 pink = "\ESC[38;5;219m"
 hotPink = "\ESC[38;5;205m"
@@ -38,7 +39,7 @@ gray = "\ESC[38;5;245m"
 red = "\ESC[38;5;210m"
 bold = "\ESC[1m"
 reset = "\ESC[0m"
- 
+
 -- Emoji/Icons
 star, heart, sparkle, check, arrow, rocket, mag, fire, tada :: String
 star = "⭐"
@@ -50,13 +51,13 @@ rocket = "🚀"
 mag = "🔍"
 fire = "🔥"
 tada = "🎉"
- 
+
 admins :: [String]
 admins = ["WICAdmin14", "nevnez14", "kiana14", "gael14"]
- 
+
 isAdmin :: String -> Bool
 isAdmin name = map toLower name `elem` map (map toLower) admins
- 
+
 data AppState = AppState
   { stateOpps :: [Opportunity]
   , stateFiltered :: [Opportunity]
@@ -66,14 +67,14 @@ data AppState = AppState
   , stateIsAdmin :: Bool
   , stateCurrentIndex :: Int
   }
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- HELPER: Truncate long text properly
 -- ══════════════════════════════════════════════════════════════
- 
+
 truncateStr :: Int -> String -> String
 truncateStr n s = if length s > n then take (n - 3) s ++ "..." else s
- 
+
 -- Pad to exact width
 padToWidth :: Int -> String -> String
 padToWidth w s = 
@@ -81,11 +82,11 @@ padToWidth w s =
   in if len >= w 
      then take w s
      else s ++ replicate (w - len) ' '
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- ANIMATIONS & EFFECTS
 -- ══════════════════════════════════════════════════════════════
- 
+
 showLoading :: String -> IO ()
 showLoading msg = do
   let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -96,7 +97,7 @@ showLoading msg = do
     ) (take 10 $ cycle frames)
   putStr "\r"
   hFlush stdout
- 
+
 drawProgressBar :: Int -> Int -> Int -> String
 drawProgressBar current total width =
   let percentage = if total == 0 then 0 else (current * 100) `div` total
@@ -104,18 +105,18 @@ drawProgressBar current total width =
       empty = width - filled
       bar = replicate filled '█' ++ replicate empty '░'
   in pink ++ "[" ++ bar ++ "] " ++ show percentage ++ "%" ++ reset
- 
+
 divider :: String -> String -> IO ()
 divider color text = do
   let width = 60
       textLen = length text + 2
       sideLen = (width - textLen) `div` 2
   putStrLn $ color ++ replicate sideLen '─' ++ " " ++ text ++ " " ++ replicate sideLen '─' ++ reset
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- MAIN ENTRY POINT
 -- ══════════════════════════════════════════════════════════════
- 
+
 runUI :: IO ()
 runUI = do
   clearScreen
@@ -146,7 +147,7 @@ runUI = do
   threadDelay 1500000
   
   mainLoop initialState
- 
+
 drawAnimatedWelcome :: IO ()
 drawAnimatedWelcome = do
   putStrLn ""
@@ -163,7 +164,7 @@ drawAnimatedWelcome = do
   threadDelay 100000
   putStrLn $ hotPink ++ bold ++ "  ╚══════════════════════════════════════════╝" ++ reset
   putStrLn ""
- 
+
 showStats :: [Opportunity] -> Day -> IO ()
 showStats opps today = do
   let total = length opps
@@ -197,11 +198,11 @@ showStats opps today = do
   
   putStrLn ""
   putStrLn $ gray ++ "  Loading..." ++ reset
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- MAIN LOOP
 -- ══════════════════════════════════════════════════════════════
- 
+
 mainLoop :: AppState -> IO ()
 mainLoop state = do
   clearScreen
@@ -220,11 +221,31 @@ mainLoop state = do
     "2" -> searchPrompt state
     "3" -> filterPrompt state
     "4" -> do
+      -- Load preferences and show recommendations
+      pmap <- loadAllPrefs
+      prefs <- case getPrefsFor (userName $ stateProfile state) pmap of
+        Just p -> do
+          putStrLn $ green ++ "\n  Using your saved preferences!" ++ reset
+          return p
+        Nothing -> do
+          putStrLn $ yellow ++ "\n  No preferences saved yet! Let's set them up." ++ reset
+          putStrLn ""
+          p <- promptForPrefs
+          _ <- savePrefsFor (userName $ stateProfile state) p pmap
+          return p
+      
+      -- Score and filter opportunities
+      let score opp = 
+            length (filter (\kw -> kw `isInfixOf` map toLower (oppTitle opp ++ oppDescription opp)) (prefKeywords prefs))
+            + length (filter (`elem` oppTags opp) (prefTags prefs))
+          combined = filter (\o -> score o > 0) $
+                     sortBy (\a b -> compare (score b) (score a)) (stateOpps state)
+      
       showLoading "Calculating recommendations"
-      let recommended = recommend (stateProfile state) (stateOpps state)
-      putStrLn $ green ++ "\n  Found " ++ show (length recommended) ++ " matches!" ++ reset
+      putStrLn $ green ++ "\n  Found " ++ show (length combined) ++ " recommendations based on your preferences!" ++ reset
       threadDelay 500000
-      browseOpportunities (state { stateFiltered = recommended, stateCurrentIndex = 0 })
+      
+      browseOpportunities (state { stateFiltered = combined, stateCurrentIndex = 0 })
     "5" -> do
       clearScreen
       putStrLn $ cyan ++ "\n  Refreshing data from sources..." ++ reset
@@ -252,7 +273,7 @@ mainLoop state = do
       putStrLn $ red ++ "\n  Invalid option. Try again." ++ reset
       pause
       mainLoop state
- 
+
 drawGoodbye :: IO ()
 drawGoodbye = do
   putStrLn ""
@@ -263,11 +284,11 @@ drawGoodbye = do
   putStrLn $ pink ++ "  ║      Good luck with your search!         ║" ++ reset
   putStrLn $ hotPink ++ bold ++ "  ╚══════════════════════════════════════════╝" ++ reset
   putStrLn ""
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- PRETTY SCREENS
 -- ══════════════════════════════════════════════════════════════
- 
+
 drawMainScreen :: AppState -> IO ()
 drawMainScreen state = do
   let username = userName (stateProfile state)
@@ -315,11 +336,11 @@ drawMainScreen state = do
   putStrLn $ gray ++ "  Showing: " ++ reset ++ show filteredCount ++ gray ++ " / " ++ reset ++ show totalCount ++ gray ++ " opportunities" ++ reset
   when (filteredCount < totalCount) $
     putStrLn $ yellow ++ "  (Filtered view - select option 1 to see all)" ++ reset
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- BROWSE MODE
 -- ══════════════════════════════════════════════════════════════
- 
+
 browseOpportunities :: AppState -> IO ()
 browseOpportunities state = do
   if null (stateFiltered state)
@@ -332,7 +353,7 @@ browseOpportunities state = do
       pause
       mainLoop state
     else browseLoop state
- 
+
 browseLoop :: AppState -> IO ()
 browseLoop state = do
   let opps = stateFiltered state
@@ -368,11 +389,11 @@ browseLoop state = do
           browseLoop state
         "b" -> mainLoop state
         _ -> browseLoop state
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- OPPORTUNITY CARD (FIXED ALIGNMENT!)
 -- ══════════════════════════════════════════════════════════════
- 
+
 drawOpportunityCard :: Day -> Opportunity -> IO ()
 drawOpportunityCard today opp = do
   let boxWidth = 60
@@ -442,11 +463,11 @@ drawOpportunityCard today opp = do
   
   -- Bottom border
   putStrLn $ pink ++ "  ╚" ++ replicate (boxWidth - 4) '═' ++ "╝" ++ reset
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- SEARCH & FILTER
 -- ══════════════════════════════════════════════════════════════
- 
+
 searchPrompt :: AppState -> IO ()
 searchPrompt state = do
   clearScreen
@@ -470,7 +491,7 @@ searchPrompt state = do
       if null results
         then mainLoop newState
         else browseOpportunities newState
- 
+
 filterPrompt :: AppState -> IO ()
 filterPrompt state = do
   clearScreen
@@ -498,11 +519,11 @@ filterPrompt state = do
         else browseOpportunities newState
     
     _ -> mainLoop state
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- COMMENTS
 -- ══════════════════════════════════════════════════════════════
- 
+
 commentsPrompt :: AppState -> IO ()
 commentsPrompt state = do
   clearScreen
@@ -531,7 +552,7 @@ commentsPrompt state = do
         putStrLn $ red ++ "\n  Invalid ID." ++ reset
         pause
         mainLoop state
- 
+
 viewComments :: AppState -> Opportunity -> IO ()
 viewComments state opp = do
   clearScreen
@@ -568,28 +589,28 @@ viewComments state opp = do
           viewComments (state { stateComments = newCmap }) opp
     
     _ -> return ()
- 
+
 drawComment :: Comment -> IO ()
 drawComment comment = do
   putStrLn $ purple ++ "  User: " ++ commentUser comment ++ reset ++ gray ++ " | " ++ commentDate comment ++ reset
   let lines = wrapText 56 (commentText comment)
   mapM_ (\line -> putStrLn $ "     " ++ line) lines
   putStrLn ""
- 
+
 -- ══════════════════════════════════════════════════════════════
 -- HELPER FUNCTIONS
 -- ══════════════════════════════════════════════════════════════
- 
+
 clearScreen :: IO ()
 clearScreen = putStr "\ESC[2J\ESC[H"
- 
+
 pause :: IO ()
 pause = do
   putStr $ gray ++ "\n  Press Enter to continue..." ++ reset
   hFlush stdout
   _ <- getLine
   return ()
- 
+
 wrapText :: Int -> String -> [String]
 wrapText width text = go (words text) []
   where
@@ -598,7 +619,7 @@ wrapText width text = go (words text) []
     go (w:ws) acc
       | length (unwords (reverse (w:acc))) <= width = go ws (w:acc)
       | otherwise = unwords (reverse acc) : go (w:ws) []
- 
+
 emptyQuery :: SearchQuery
 emptyQuery = SearchQuery
   { queryKeyword = Nothing
