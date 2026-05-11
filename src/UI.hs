@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
-
+ 
 -- UI.hs  
 -- Enhanced beautiful pink-themed terminal UI for WiC Opportunities
--- FIXED: Box alignment issues
-
+-- FIXED: Box alignment + removed upcoming deadlines option
+ 
 module UI (runUI) where
-
+ 
 import Types
 import Scraper (loadFromCache, refreshAll)
 import Search (search)
@@ -21,12 +21,11 @@ import System.IO (hFlush, stdout)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Prelude hiding (truncate)
-import Admin (addWicJob, removeWicJob)
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- ANSI COLOR CODES
 -- ══════════════════════════════════════════════════════════════
-
+ 
 pink, hotPink, purple, cyan, yellow, green, white, gray, red, bold, reset :: String
 pink = "\ESC[38;5;219m"
 hotPink = "\ESC[38;5;205m"
@@ -39,7 +38,7 @@ gray = "\ESC[38;5;245m"
 red = "\ESC[38;5;210m"
 bold = "\ESC[1m"
 reset = "\ESC[0m"
-
+ 
 -- Emoji/Icons
 star, heart, sparkle, check, arrow, rocket, mag, fire, tada :: String
 star = "⭐"
@@ -51,13 +50,13 @@ rocket = "🚀"
 mag = "🔍"
 fire = "🔥"
 tada = "🎉"
-
+ 
 admins :: [String]
 admins = ["WICAdmin14", "nevnez14", "kiana14", "gael14"]
-
+ 
 isAdmin :: String -> Bool
 isAdmin name = map toLower name `elem` map (map toLower) admins
-
+ 
 data AppState = AppState
   { stateOpps :: [Opportunity]
   , stateFiltered :: [Opportunity]
@@ -67,39 +66,26 @@ data AppState = AppState
   , stateIsAdmin :: Bool
   , stateCurrentIndex :: Int
   }
-
+ 
 -- ══════════════════════════════════════════════════════════════
--- HELPER: Visual length (accounts for emoji)
+-- HELPER: Truncate long text properly
 -- ══════════════════════════════════════════════════════════════
-
--- Calculate visual width (emoji = 2 chars wide)
-visualLength :: String -> Int
-visualLength = go 0
-  where
-    go n [] = n
-    go n (c:cs)
-      | c > '\x1100' = go (n + 2) cs  -- Wide char (emoji, CJK)
-      | otherwise = go (n + 1) cs
-
--- Pad to visual width
+ 
+truncateStr :: Int -> String -> String
+truncateStr n s = if length s > n then take (n - 3) s ++ "..." else s
+ 
+-- Pad to exact width
 padToWidth :: Int -> String -> String
-padToWidth w s = s ++ replicate (max 0 (w - visualLength s)) ' '
-
--- Truncate to visual width
-truncToWidth :: Int -> String -> String
-truncToWidth w s = go 0 s
-  where
-    go _ [] = []
-    go n (c:cs)
-      | n >= w = []
-      | c > '\x1100' && n + 2 > w = []
-      | c > '\x1100' = c : go (n + 2) cs
-      | otherwise = c : go (n + 1) cs
-
+padToWidth w s = 
+  let len = length s
+  in if len >= w 
+     then take w s
+     else s ++ replicate (w - len) ' '
+ 
 -- ══════════════════════════════════════════════════════════════
 -- ANIMATIONS & EFFECTS
 -- ══════════════════════════════════════════════════════════════
-
+ 
 showLoading :: String -> IO ()
 showLoading msg = do
   let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -110,7 +96,7 @@ showLoading msg = do
     ) (take 10 $ cycle frames)
   putStr "\r"
   hFlush stdout
-
+ 
 drawProgressBar :: Int -> Int -> Int -> String
 drawProgressBar current total width =
   let percentage = if total == 0 then 0 else (current * 100) `div` total
@@ -118,18 +104,18 @@ drawProgressBar current total width =
       empty = width - filled
       bar = replicate filled '█' ++ replicate empty '░'
   in pink ++ "[" ++ bar ++ "] " ++ show percentage ++ "%" ++ reset
-
+ 
 divider :: String -> String -> IO ()
 divider color text = do
   let width = 60
       textLen = length text + 2
       sideLen = (width - textLen) `div` 2
   putStrLn $ color ++ replicate sideLen '─' ++ " " ++ text ++ " " ++ replicate sideLen '─' ++ reset
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- MAIN ENTRY POINT
 -- ══════════════════════════════════════════════════════════════
-
+ 
 runUI :: IO ()
 runUI = do
   clearScreen
@@ -160,7 +146,7 @@ runUI = do
   threadDelay 1500000
   
   mainLoop initialState
-
+ 
 drawAnimatedWelcome :: IO ()
 drawAnimatedWelcome = do
   putStrLn ""
@@ -169,15 +155,15 @@ drawAnimatedWelcome = do
   threadDelay 100000
   putStrLn $ hotPink ++ bold ++ "  ║                                          ║" ++ reset
   threadDelay 100000
-  putStrLn $ hotPink ++ bold ++ "  ║         WiC Opportunities Finder         ║" ++ reset
+  putStrLn $ hotPink ++ bold ++ "  ║    WiC Opportunities Finder              ║" ++ reset
   threadDelay 100000
-  putStrLn $ pink ++ "  ║          UNM Women in Computing          ║" ++ reset
+  putStrLn $ pink ++ "  ║      UNM Women in Computing              ║" ++ reset
   threadDelay 100000
   putStrLn $ pink ++ "  ║                                          ║" ++ reset
   threadDelay 100000
   putStrLn $ hotPink ++ bold ++ "  ╚══════════════════════════════════════════╝" ++ reset
   putStrLn ""
-
+ 
 showStats :: [Opportunity] -> Day -> IO ()
 showStats opps today = do
   let total = length opps
@@ -211,11 +197,11 @@ showStats opps today = do
   
   putStrLn ""
   putStrLn $ gray ++ "  Loading..." ++ reset
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- MAIN LOOP
 -- ══════════════════════════════════════════════════════════════
-
+ 
 mainLoop :: AppState -> IO ()
 mainLoop state = do
   clearScreen
@@ -234,16 +220,12 @@ mainLoop state = do
     "2" -> searchPrompt state
     "3" -> filterPrompt state
     "4" -> do
-      let sorted = sortByDeadline (stateOpps state)
-          upcoming = upcomingDeadlines (stateToday state) 30 sorted
-      browseOpportunities (state { stateFiltered = upcoming, stateCurrentIndex = 0 })
-    "5" -> do
       showLoading "Calculating recommendations"
       let recommended = recommend (stateProfile state) (stateOpps state)
       putStrLn $ green ++ "\n  Found " ++ show (length recommended) ++ " matches!" ++ reset
       threadDelay 500000
       browseOpportunities (state { stateFiltered = recommended, stateCurrentIndex = 0 })
-    "6" -> do
+    "5" -> do
       clearScreen
       putStrLn $ cyan ++ "\n  Refreshing data from sources..." ++ reset
       putStrLn ""
@@ -253,12 +235,14 @@ mainLoop state = do
       pause
       mainLoop (state { stateOpps = fresh, stateFiltered = fresh })
     "c" -> commentsPrompt state
+    "6" | stateIsAdmin state -> do
+      putStrLn $ hotPink ++ "\n  [ADMIN] Add WiC Job - Coming soon!" ++ reset
+      pause
+      mainLoop state
     "7" | stateIsAdmin state -> do
-      newState <- addWicJobUI state
-      mainLoop newState
-    "8" | stateIsAdmin state -> do
-      newState <- removeWicJobUI state
-      mainLoop newState
+      putStrLn $ hotPink ++ "\n  [ADMIN] Remove WiC Job - Coming soon!" ++ reset
+      pause
+      mainLoop state
     "s" -> do
       clearScreen
       showStats (stateOpps state) (stateToday state)
@@ -268,7 +252,7 @@ mainLoop state = do
       putStrLn $ red ++ "\n  Invalid option. Try again." ++ reset
       pause
       mainLoop state
-
+ 
 drawGoodbye :: IO ()
 drawGoodbye = do
   putStrLn ""
@@ -279,11 +263,11 @@ drawGoodbye = do
   putStrLn $ pink ++ "  ║      Good luck with your search!         ║" ++ reset
   putStrLn $ hotPink ++ bold ++ "  ╚══════════════════════════════════════════╝" ++ reset
   putStrLn ""
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- PRETTY SCREENS
 -- ══════════════════════════════════════════════════════════════
-
+ 
 drawMainScreen :: AppState -> IO ()
 drawMainScreen state = do
   let username = userName (stateProfile state)
@@ -301,31 +285,29 @@ drawMainScreen state = do
         then [ ("1", "Browse all opportunities")
              , ("2", "Search by keyword")
              , ("3", "Filter by tag")
-             , ("4", "View upcoming deadlines")
-             , ("5", "Recommendations for me")
-             , ("6", "Refresh (fetch live data)")
-             , ("C", "Comments on job")
+             , ("4", "Recommendations for me")
+             , ("5", "Refresh (fetch live data)")
+             , ("C", "Comments (browse a job first!)")
              , ("S", "Show statistics")
-             , ("7", "Add WiC curated job [ADMIN]")
-             , ("8", "Remove WiC curated job [ADMIN]")
+             , ("6", "Add WiC curated job [ADMIN]")
+             , ("7", "Remove WiC curated job [ADMIN]")
              , ("Q", "Quit")
              ]
         else [ ("1", "Browse all opportunities")
              , ("2", "Search by keyword")
              , ("3", "Filter by tag")
-             , ("4", "View upcoming deadlines")
-             , ("5", "Recommendations for me")
-             , ("6", "Refresh (fetch live data)")
-             , ("C", "Comments on job")
+             , ("4", "Recommendations for me")
+             , ("5", "Refresh (fetch live data)")
+             , ("C", "Comments (browse a job first!)")
              , ("S", "Show statistics")
              , ("Q", "Quit")
              ]
   
   putStrLn $ pink ++ "  ┌──────────────────────────────────────┐" ++ reset
   mapM_ (\(key, desc) -> do
-    let line = "  │ " ++ cyan ++ key ++ reset ++ " " ++ arrow ++ " " ++ desc
-        padding = 42 - visualLength line + length reset + length cyan
-    putStrLn $ line ++ replicate padding ' ' ++ pink ++ "│" ++ reset
+    let line = key ++ " " ++ arrow ++ " " ++ desc
+        padded = padToWidth 38 line
+    putStrLn $ "  │ " ++ cyan ++ padded ++ reset ++ pink ++ "│" ++ reset
     ) menuItems
   putStrLn $ pink ++ "  └──────────────────────────────────────┘" ++ reset
   
@@ -333,11 +315,11 @@ drawMainScreen state = do
   putStrLn $ gray ++ "  Showing: " ++ reset ++ show filteredCount ++ gray ++ " / " ++ reset ++ show totalCount ++ gray ++ " opportunities" ++ reset
   when (filteredCount < totalCount) $
     putStrLn $ yellow ++ "  (Filtered view - select option 1 to see all)" ++ reset
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- BROWSE MODE
 -- ══════════════════════════════════════════════════════════════
-
+ 
 browseOpportunities :: AppState -> IO ()
 browseOpportunities state = do
   if null (stateFiltered state)
@@ -350,7 +332,7 @@ browseOpportunities state = do
       pause
       mainLoop state
     else browseLoop state
-
+ 
 browseLoop :: AppState -> IO ()
 browseLoop state = do
   let opps = stateFiltered state
@@ -386,11 +368,11 @@ browseLoop state = do
           browseLoop state
         "b" -> mainLoop state
         _ -> browseLoop state
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- OPPORTUNITY CARD (FIXED ALIGNMENT!)
 -- ══════════════════════════════════════════════════════════════
-
+ 
 drawOpportunityCard :: Day -> Opportunity -> IO ()
 drawOpportunityCard today opp = do
   let boxWidth = 60
@@ -399,38 +381,40 @@ drawOpportunityCard today opp = do
   -- Top border
   putStrLn $ pink ++ "  ╔" ++ replicate (boxWidth - 4) '═' ++ "╗" ++ reset
   
-  -- Title line
+  -- Title line (TRUNCATE if too long)
   let titleBase = oppTitle opp ++ " @ " ++ oppCompany opp
-      wicBadge = if oppIsWicPick opp then " [WiC Pick]" else ""
-      titleLine = titleBase ++ wicBadge
+      wicBadge = if oppIsWicPick opp then " [WiC]" else ""
+      titleFull = titleBase ++ wicBadge
+      titleLine = truncateStr contentWidth titleFull
   putStrLn $ "  ║ " ++ hotPink ++ bold ++ padToWidth contentWidth titleLine ++ reset ++ pink ++ "║" ++ reset
   
   -- Divider
   putStrLn $ pink ++ "  ╠" ++ replicate (boxWidth - 4) '─' ++ "╣" ++ reset
   
-  -- Type
-  let typeLine = "Type: " ++ show (oppType opp)
+  -- Type (TRUNCATE if too long)
+  let typeLine = truncateStr contentWidth ("Type: " ++ show (oppType opp))
   putStrLn $ "  ║ " ++ cyan ++ padToWidth contentWidth typeLine ++ reset ++ pink ++ "║" ++ reset
   
-  -- Source
-  let sourceLine = "Source: " ++ oppSource opp
+  -- Source (TRUNCATE if too long)
+  let sourceLine = truncateStr contentWidth ("Source: " ++ oppSource opp)
   putStrLn $ "  ║ " ++ cyan ++ padToWidth contentWidth sourceLine ++ reset ++ pink ++ "║" ++ reset
   
-  -- Tags
-  let tagsLine = "Tags: " ++ intercalate ", " (map show $ oppTags opp)
+  -- Tags (TRUNCATE if too long)
+  let tagsLine = truncateStr contentWidth ("Tags: " ++ intercalate ", " (map show $ oppTags opp))
   putStrLn $ "  ║ " ++ purple ++ padToWidth contentWidth tagsLine ++ reset ++ pink ++ "║" ++ reset
   
   -- Divider
   putStrLn $ pink ++ "  ╠" ++ replicate (boxWidth - 4) '─' ++ "╣" ++ reset
   
-  -- Deadline
+  -- Deadline (TRUNCATE if too long)
   let status = deadlineStatus today opp
       (statusColor, statusText) = case status of
         Urgent  -> (red, "URGENT")
         Soon    -> (yellow, "Soon")
         Future  -> (green, "Future")
         Rolling -> (gray, "Rolling")
-      deadlineLine = "Deadline: " ++ maybe "N/A" show (oppDeadline opp) ++ " [" ++ statusText ++ "]"
+      deadlineFull = "Deadline: " ++ maybe "N/A" show (oppDeadline opp) ++ " [" ++ statusText ++ "]"
+      deadlineLine = truncateStr contentWidth deadlineFull
   putStrLn $ "  ║ " ++ statusColor ++ bold ++ padToWidth contentWidth deadlineLine ++ reset ++ pink ++ "║" ++ reset
   
   -- Divider
@@ -439,10 +423,11 @@ drawOpportunityCard today opp = do
   -- Description header
   putStrLn $ "  ║ " ++ bold ++ padToWidth contentWidth "Description:" ++ reset ++ pink ++ "║" ++ reset
   
-  -- Description lines
+  -- Description lines (WRAP and TRUNCATE properly)
   let descLines = wrapText (contentWidth - 2) (oppDescription opp)
-  mapM_ (\line -> 
-    putStrLn $ "  ║  " ++ padToWidth (contentWidth - 1) line ++ pink ++ "║" ++ reset
+  mapM_ (\line -> do
+    let truncated = truncateStr (contentWidth - 1) line
+    putStrLn $ "  ║  " ++ padToWidth (contentWidth - 1) truncated ++ pink ++ "║" ++ reset
     ) (take 4 descLines)
   
   when (length descLines > 4) $
@@ -451,17 +436,17 @@ drawOpportunityCard today opp = do
   -- Divider
   putStrLn $ pink ++ "  ╠" ++ replicate (boxWidth - 4) '─' ++ "╣" ++ reset
   
-  -- URL
-  let urlLine = "URL: " ++ oppURL opp
+  -- URL (TRUNCATE if too long)
+  let urlLine = truncateStr contentWidth ("URL: " ++ oppURL opp)
   putStrLn $ "  ║ " ++ cyan ++ padToWidth contentWidth urlLine ++ reset ++ pink ++ "║" ++ reset
   
   -- Bottom border
   putStrLn $ pink ++ "  ╚" ++ replicate (boxWidth - 4) '═' ++ "╝" ++ reset
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- SEARCH & FILTER
 -- ══════════════════════════════════════════════════════════════
-
+ 
 searchPrompt :: AppState -> IO ()
 searchPrompt state = do
   clearScreen
@@ -485,7 +470,7 @@ searchPrompt state = do
       if null results
         then mainLoop newState
         else browseOpportunities newState
-
+ 
 filterPrompt :: AppState -> IO ()
 filterPrompt state = do
   clearScreen
@@ -513,35 +498,40 @@ filterPrompt state = do
         else browseOpportunities newState
     
     _ -> mainLoop state
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- COMMENTS
 -- ══════════════════════════════════════════════════════════════
-
+ 
 commentsPrompt :: AppState -> IO ()
 commentsPrompt state = do
   clearScreen
   putStrLn $ pink ++ bold ++ "\n  View/Add Comments" ++ reset
   putStrLn ""
-  putStr $ cyan ++ "  Enter job ID: " ++ reset
+  putStrLn $ yellow ++ "  Tip: Press 'C' while browsing to comment on a job!" ++ reset
+  putStrLn ""
+  putStrLn $ gray ++ "  Or enter a job ID if you know it:" ++ reset
+  putStr $ cyan ++ "  Job ID (or press Enter to go back): " ++ reset
   hFlush stdout
   idStr <- getLine
   
-  case reads idStr of
-    [(jobId, "")] ->
-      case find (\o -> oppId o == jobId) (stateOpps state) of
-        Nothing -> do
-          putStrLn $ red ++ "\n  No job found with ID " ++ idStr ++ reset
-          pause
-          mainLoop state
-        Just opp -> do
-          viewComments state opp
-          mainLoop state
-    _ -> do
-      putStrLn $ red ++ "\n  Invalid ID." ++ reset
-      pause
-      mainLoop state
-
+  if null idStr
+    then mainLoop state
+    else case reads idStr of
+      [(jobId, "")] ->
+        case find (\o -> oppId o == jobId) (stateOpps state) of
+          Nothing -> do
+            putStrLn $ red ++ "\n  No job found with ID " ++ idStr ++ reset
+            pause
+            mainLoop state
+          Just opp -> do
+            viewComments state opp
+            mainLoop state
+      _ -> do
+        putStrLn $ red ++ "\n  Invalid ID." ++ reset
+        pause
+        mainLoop state
+ 
 viewComments :: AppState -> Opportunity -> IO ()
 viewComments state opp = do
   clearScreen
@@ -578,97 +568,28 @@ viewComments state opp = do
           viewComments (state { stateComments = newCmap }) opp
     
     _ -> return ()
-
+ 
 drawComment :: Comment -> IO ()
 drawComment comment = do
   putStrLn $ purple ++ "  User: " ++ commentUser comment ++ reset ++ gray ++ " | " ++ commentDate comment ++ reset
   let lines = wrapText 56 (commentText comment)
   mapM_ (\line -> putStrLn $ "     " ++ line) lines
   putStrLn ""
-
-addWicJobUI :: AppState -> IO AppState
-addWicJobUI state = do
-  clearScreen
-  putStrLn $ hotPink ++ bold ++ "\n  [ADMIN] Add WiC Curated Job" ++ reset
-  putStrLn ""
-  putStr $ cyan ++ "  Job title:\n  > " ++ reset
-  hFlush stdout
-  title <- getLine
-  putStr $ cyan ++ "  Company:\n  > " ++ reset
-  hFlush stdout
-  company <- getLine
-  putStr $ cyan ++ "  Description:\n  > " ++ reset
-  hFlush stdout
-  desc <- getLine
-  putStr $ cyan ++ "  URL:\n  > " ++ reset
-  hFlush stdout
-  url <- getLine
-  putStr $ cyan ++ "  Source (e.g. LinkedIn, Handshake):\n  > " ++ reset
-  hFlush stdout
-  source <- getLine
-  putStrLn $ cyan ++ "\n  Tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime" ++ reset
-  putStr $ cyan ++ "  Tags (comma separated):\n  > " ++ reset
-  hFlush stdout
-  tagStr <- getLine
-  putStrLn $ cyan ++ "\n  Type: 1=Internship  2=Job  3=ResearchPosition" ++ reset
-  putStr $ cyan ++ "  > " ++ reset
-  hFlush stdout
-  typeStr <- getLine
-  let tags = parseTags tagStr
-      oppType = case typeStr of
-                  "1" -> Internship
-                  "3" -> ResearchPosition
-                  _   -> Job
-  fresh <- addWicJob (stateOpps state) title company desc url source tags oppType
-  putStrLn $ green ++ "\n  Added '" ++ title ++ "' as a WiC Pick!" ++ reset
-  pause
-  return (state { stateOpps = fresh, stateFiltered = fresh })
-
-removeWicJobUI :: AppState -> IO AppState
-removeWicJobUI state = do
-  clearScreen
-  putStrLn $ hotPink ++ bold ++ "\n  [ADMIN] Remove WiC Curated Job" ++ reset
-  putStrLn ""
-  let wicJobs = filter oppIsWicPick (stateOpps state)
-  if null wicJobs
-    then do
-      putStrLn $ gray ++ "  No WiC curated jobs to remove." ++ reset
-      pause
-      return state
-    else do
-      putStrLn $ cyan ++ "  Current WiC Picks:" ++ reset
-      putStrLn ""
-      mapM_ (\o -> putStrLn $ "  " ++ yellow ++ "[" ++ show (oppId o) ++ "]" ++ reset
-              ++ " " ++ oppTitle o ++ " @ " ++ oppCompany o) wicJobs
-      putStrLn ""
-      putStr $ cyan ++ "  Enter ID to remove:\n  > " ++ reset
-      hFlush stdout
-      idStr <- getLine
-      case reads idStr of
-        [(targetId, "")] -> do
-          fresh <- removeWicJob (stateOpps state) targetId
-          putStrLn $ green ++ "\n  Job removed!" ++ reset
-          pause
-          return (state { stateOpps = fresh, stateFiltered = fresh })
-        _ -> do
-          putStrLn $ red ++ "\n  Invalid ID." ++ reset
-          pause
-          return state  
-
+ 
 -- ══════════════════════════════════════════════════════════════
 -- HELPER FUNCTIONS
 -- ══════════════════════════════════════════════════════════════
-
+ 
 clearScreen :: IO ()
 clearScreen = putStr "\ESC[2J\ESC[H"
-
+ 
 pause :: IO ()
 pause = do
   putStr $ gray ++ "\n  Press Enter to continue..." ++ reset
   hFlush stdout
   _ <- getLine
   return ()
-
+ 
 wrapText :: Int -> String -> [String]
 wrapText width text = go (words text) []
   where
@@ -677,7 +598,7 @@ wrapText width text = go (words text) []
     go (w:ws) acc
       | length (unwords (reverse (w:acc))) <= width = go ws (w:acc)
       | otherwise = unwords (reverse acc) : go (w:ws) []
-
+ 
 emptyQuery :: SearchQuery
 emptyQuery = SearchQuery
   { queryKeyword = Nothing
@@ -685,28 +606,3 @@ emptyQuery = SearchQuery
   , queryType = Nothing
   , queryRemote = Nothing
   }
-
-parseTags :: String -> [Tag]
-parseTags s = [t | Just t <- map (parseTag . trim) (splitOn ',' s)]
-
-parseTag :: String -> Maybe Tag
-parseTag s = case map toLower s of
-  "software" -> Just Software
-  "research" -> Just Research
-  "remote" -> Just Remote
-  "inperson" -> Just InPerson
-  "paid" -> Just Paid
-  "unpaid" -> Just Unpaid
-  "parttime" -> Just PartTime
-  "fulltime" -> Just FullTime
-  _  -> Nothing
-
-splitOn :: Char -> String -> [String]
-splitOn _ "" = [""]
-splitOn c (x:xs)
-  | x == c    = "" : splitOn c xs
-  | otherwise = let (w:ws) = splitOn c xs in (x:w) : ws
-
-trim :: String -> String
-trim = f . f
-  where f = reverse . dropWhile (== ' ')  
