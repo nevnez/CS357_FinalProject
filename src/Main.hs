@@ -17,7 +17,8 @@ import Deadline (sortByDeadline, upcomingDeadlines)
 import Display
 import Data.Time (getCurrentTime, utctDay, Day)
 
-import Data.Aeson (eitherDecodeFileStrict, encodeFile, object, (.=), Value(..))
+import Data.Aeson (eitherDecodeFileStrict, encodeFile)
+import Admin (addWicJob, removeWicJob, loadWicJobs)
 import Data.Aeson.Types (parseMaybe, (.:))
 import Data.Char (toLower)
 import Data.Maybe (fromMaybe)
@@ -26,6 +27,7 @@ import System.IO (hFlush, stdout)
 import Comments
 import Preferences
 import Data.List (find, isInfixOf, sortBy)
+
 
 -- =========== Admin list ============
 -- add username to grant admin access.
@@ -121,6 +123,32 @@ userLoop today opps profile cmap = do
       fresh <- refreshAll
       userLoop today fresh profile cmap
 
+    "7" -> do
+      title <- promptUser "Job title:"
+      company <- promptUser "Company:"
+      desc <- promptUser "Description:"
+      url <- promptUser "URL:"
+      source <- promptUser "Source:"
+      tagStr <- promptUser "Tags (comma separated):"
+      typeStr <- promptUser "Type (1=Internship, 2=Job, 3=Research):"
+      let tags = parseTags tagStr
+          oppType = case typeStr of
+                      "1" -> Internship
+                      "3" -> ResearchPosition
+                      _   -> Job
+      fresh <- addWicJob opps title company desc url source tags oppType
+      adminLoop today fresh profile cmap  
+
+    "8" -> do
+      let wicJobs = filter oppIsWicPick opps
+      if null wicJobs
+        then putStrLn "No WiC curated jobs to remove."
+        else do
+          mapM_ (\o -> putStrLn ("  [" ++ show (oppId o) ++ "] " ++ oppTitle o)) wicJobs
+          idStr <- promptUser "Enter ID to remove:"
+          fresh <- removeWicJob opps (read idStr)
+          adminLoop today fresh profile cmap
+
     "c" -> do
       cmap' <- handleComments (map toLower choice) opps (userName profile) cmap
       userLoop today opps profile cmap'
@@ -200,12 +228,30 @@ adminLoop today opps profile cmap = do
       adminLoop today opps profile cmap'  
  
     "7" -> do
-      fresh <- addWicJob opps
-      adminLoop today fresh profile cmap
+      title <- promptUser "Job title:"
+      company <- promptUser "Company:"
+      desc <- promptUser "Description:"
+      url <- promptUser "URL:"
+      source <- promptUser "Source:"
+      tagStr <- promptUser "Tags (comma separated):"
+      typeStr <- promptUser "Type (1=Internship, 2=Job, 3=Research):"
+      let tags = parseTags tagStr
+          oppType = case typeStr of
+                      "1" -> Internship
+                      "3" -> ResearchPosition
+                      _   -> Job
+      fresh <- addWicJob opps title company desc url source tags oppType
+      adminLoop today fresh profile cmap  
  
     "8" -> do
-      fresh <- removeWicJob opps
-      adminLoop today fresh profile cmap
+      let wicJobs = filter oppIsWicPick opps
+      if null wicJobs
+        then putStrLn "No WiC curated jobs to remove."
+        else do
+          mapM_ (\o -> putStrLn ("  [" ++ show (oppId o) ++ "] " ++ oppTitle o)) wicJobs
+          idStr <- promptUser "Enter ID to remove:"
+          fresh <- removeWicJob opps (read idStr)
+          adminLoop today fresh profile cmap
  
     "0" -> putStrLn "Goodbye!"
  
@@ -247,73 +293,73 @@ handleComments _ opps userName cmap = do
 
 -- Admin Actions
 
-addWicJob :: [Opportunity] -> IO [Opportunity]
-addWicJob opps = do
-  putStrLn "\n── Add WiC Curated Job ──"
-  title <- promptUser "Job title:"
-  company <- promptUser "Company:"
-  desc <- promptUser "Description:"
-  url <- promptUser "URL:"
-  source <- promptUser "Source (e.g. LinkedIn, Handshake):"
-  putStrLn "Tags (comma separated): Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
-  tagStr <- promptUser "Tags:"
-  putStrLn "Type: 1=Internship, 2=Job, 3=ResearchPosition"
-  typeStr <- promptUser "Type:"
+-- addWicJob :: [Opportunity] -> IO [Opportunity]
+-- addWicJob opps = do
+--   putStrLn "\n── Add WiC Curated Job ──"
+--   title <- promptUser "Job title:"
+--   company <- promptUser "Company:"
+--   desc <- promptUser "Description:"
+--   url <- promptUser "URL:"
+--   source <- promptUser "Source (e.g. LinkedIn, Handshake):"
+--   putStrLn "Tags (comma separated): Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime"
+--   tagStr <- promptUser "Tags:"
+--   putStrLn "Type: 1=Internship, 2=Job, 3=ResearchPosition"
+--   typeStr <- promptUser "Type:"
  
-  let tags = parseTags tagStr
-      oppType = case typeStr of
-                  "1" -> Internship
-                  "3" -> ResearchPosition
-                  _   -> Job
-      newOpp = Opportunity
-        { oppId = length opps + 1
-        , oppTitle = title
-        , oppCompany = company
-        , oppDescription = desc
-        , oppTags = tags
-        , oppType = oppType
-        , oppDeadline = Nothing
-        , oppURL = url
-        , oppSource = source
-        , oppIsWicPick = True
-        }
+--   let tags = parseTags tagStr
+--       oppType = case typeStr of
+--                   "1" -> Internship
+--                   "3" -> ResearchPosition
+--                   _   -> Job
+--       newOpp = Opportunity
+--         { oppId = length opps + 1
+--         , oppTitle = title
+--         , oppCompany = company
+--         , oppDescription = desc
+--         , oppTags = tags
+--         , oppType = oppType
+--         , oppDeadline = Nothing
+--         , oppURL = url
+--         , oppSource = source
+--         , oppIsWicPick = True
+--         }
  
-  -- Load existing WiC jobs, append, save
-  existing <- loadWicJobs
-  let updated = existing ++ [newOpp]
-  encodeFile wicJobsFile updated
-  putStrLn ("[Admin] Added '" ++ title ++ "' as a WiC Pick!")
-  return (opps ++ [newOpp])
+--   -- Load existing WiC jobs, append, save
+--   existing <- loadWicJobs
+--   let updated = existing ++ [newOpp]
+--   encodeFile wicJobsFile updated
+--   putStrLn ("[Admin] Added '" ++ title ++ "' as a WiC Pick!")
+--   return (opps ++ [newOpp])
  
-removeWicJob :: [Opportunity] -> IO [Opportunity]
-removeWicJob opps = do
-  putStrLn "\n── Remove WiC Curated Job ──"
-  let wicJobs = filter oppIsWicPick opps
-  if null wicJobs
-    then do
-      putStrLn "No WiC curated jobs to remove."
-      return opps
-    else do
-      putStrLn "Current WiC Picks:"
-      mapM_ (\o -> putStrLn ("  " ++ show (oppId o) ++ ". " ++ oppTitle o ++ " @ " ++ oppCompany o)) wicJobs
-      idStr <- promptUser "Enter ID to remove:"
-      let targetId = read idStr :: Int
-          updated = filter (\o -> not (oppIsWicPick o && oppId o == targetId)) opps
-          wicOnly = filter oppIsWicPick updated
-      encodeFile wicJobsFile wicOnly
-      putStrLn "[Admin] Job removed."
-      return updated
+-- removeWicJob :: [Opportunity] -> IO [Opportunity]
+-- removeWicJob opps = do
+--   putStrLn "\n── Remove WiC Curated Job ──"
+--   let wicJobs = filter oppIsWicPick opps
+--   if null wicJobs
+--     then do
+--       putStrLn "No WiC curated jobs to remove."
+--       return opps
+--     else do
+--       putStrLn "Current WiC Picks:"
+--       mapM_ (\o -> putStrLn ("  " ++ show (oppId o) ++ ". " ++ oppTitle o ++ " @ " ++ oppCompany o)) wicJobs
+--       idStr <- promptUser "Enter ID to remove:"
+--       let targetId = read idStr :: Int
+--           updated = filter (\o -> not (oppIsWicPick o && oppId o == targetId)) opps
+--           wicOnly = filter oppIsWicPick updated
+--       encodeFile wicJobsFile wicOnly
+--       putStrLn "[Admin] Job removed."
+--       return updated
  
-loadWicJobs :: IO [Opportunity]
-loadWicJobs = do
-  exists <- doesFileExist wicJobsFile
-  if not exists
-    then return []
-    else do
-      result <- eitherDecodeFileStrict wicJobsFile
-      case result of
-        Left  _ -> return []
-        Right opps -> return opps
+-- loadWicJobs :: IO [Opportunity]
+-- loadWicJobs = do
+--   exists <- doesFileExist wicJobsFile
+--   if not exists
+--     then return []
+--     else do
+--       result <- eitherDecodeFileStrict wicJobsFile
+--       case result of
+--         Left  _ -> return []
+--         Right opps -> return opps
 
 -- Helpers
  
