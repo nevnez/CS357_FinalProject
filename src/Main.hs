@@ -24,8 +24,8 @@ import Data.Maybe (fromMaybe)
 import System.Directory (doesFileExist)
 import System.IO (hFlush, stdout)
 import Comments
-import Data.List (find, isInfixOf)
 import Preferences
+import Data.List (find, isInfixOf, sortBy)
 
 -- =========== Admin list ============
 -- add username to grant admin access.
@@ -108,13 +108,14 @@ userLoop today opps profile cmap = do
           _ <- savePrefsFor (userName profile) p pmap 
           return p 
 
-      let kwResults = concatMap (\kw -> search (emptyQuery {queryKeyword = Just kw}) opps) (prefKeywords prefs)   
-          tagResults = concatMap (\tag -> filterByTags [tag] opps) (prefTags prefs)
-          combined = kwResults ++ filter (`notElem` kwResults) tagResults
-      putStrLn ("\n Found " ++ show (length combined) ++ " recommendations.")
+      let score opp = 
+            length (filter (\kw -> kw `isInfixOf` map toLower (oppTitle opp ++ oppDescription opp)) (prefKeywords prefs))
+            + length (filter (`elem` oppTags opp) (prefTags prefs))
+          combined = filter (\o -> score o > 0) $
+                     sortBy (\a b -> compare (score b) (score a)) opps
+      putStrLn ("\n  Found " ++ show (length combined) ++ " recommendations.")
       displayList today combined
-      userLoop today opps profile cmap  
-
+      userLoop today opps profile cmap
 
     "6" -> do
       fresh <- refreshAll
@@ -177,13 +178,15 @@ adminLoop today opps profile cmap = do
           _ <- savePrefsFor (userName profile) p pmap 
           return p 
 
-      let kwResults = concatMap (\kw -> search (emptyQuery {queryKeyword = Just kw}) opps) (prefKeywords prefs)   
-          tagResults = concatMap (\tag -> filterByTags [tag] opps) (prefTags prefs)
-          combined = kwResults ++ filter (`notElem` kwResults) tagResults
-      putStrLn ("\n Found " ++ show (length combined) ++ " recommendations.")
+      let score opp = 
+            length (filter (\kw -> kw `isInfixOf` map toLower (oppTitle opp ++ oppDescription opp)) (prefKeywords prefs))
+            + length (filter (`elem` oppTags opp) (prefTags prefs))
+          combined = filter (\o -> score o > 0) $
+                     sortBy (\a b -> compare (score b) (score a)) opps
+      putStrLn ("\n  Found " ++ show (length combined) ++ " recommendations.")
       displayList today combined
-      userLoop today opps profile cmap  
- 
+      userLoop today opps profile cmap
+      
     "6" -> do
       fresh <- refreshAll
       adminLoop today fresh profile cmap
