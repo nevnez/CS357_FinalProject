@@ -22,6 +22,7 @@ import System.IO (hFlush, stdout)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Prelude hiding (truncate)
+import Admin (addWicJob, removeWicJob)
 
 -- ══════════════════════════════════════════════════════════════
 -- ANSI COLOR CODES
@@ -257,13 +258,12 @@ mainLoop state = do
       mainLoop (state { stateOpps = fresh, stateFiltered = fresh })
     "c" -> commentsPrompt state
     "6" | stateIsAdmin state -> do
-      putStrLn $ hotPink ++ "\n  [ADMIN] Add WiC Job - Coming soon!" ++ reset
-      pause
+      newState <- addWicJobUI state
+      mainLoop newState
       mainLoop state
     "7" | stateIsAdmin state -> do
-      putStrLn $ hotPink ++ "\n  [ADMIN] Remove WiC Job - Coming soon!" ++ reset
-      pause
-      mainLoop state
+      newState <- removeWicJobUI state
+      mainLoop newState
     "s" -> do
       clearScreen
       showStats (stateOpps state) (stateToday state)
@@ -597,6 +597,75 @@ drawComment comment = do
   mapM_ (\line -> putStrLn $ "     " ++ line) lines
   putStrLn ""
 
+addWicJobUI :: AppState -> IO AppState
+addWicJobUI state = do
+  clearScreen
+  putStrLn $ hotPink ++ bold ++ "\n  [ADMIN] Add WiC Curated Job" ++ reset
+  putStrLn ""
+  putStr $ cyan ++ "  Job title:\n  > " ++ reset
+  hFlush stdout
+  title <- getLine
+  putStr $ cyan ++ "  Company:\n  > " ++ reset
+  hFlush stdout
+  company <- getLine
+  putStr $ cyan ++ "  Description:\n  > " ++ reset
+  hFlush stdout
+  desc <- getLine
+  putStr $ cyan ++ "  URL:\n  > " ++ reset
+  hFlush stdout
+  url <- getLine
+  putStr $ cyan ++ "  Source (e.g. LinkedIn, Handshake):\n  > " ++ reset
+  hFlush stdout
+  source <- getLine
+  putStrLn $ cyan ++ "\n  Tags: Software, Research, Remote, InPerson, Paid, Unpaid, PartTime, FullTime" ++ reset
+  putStr $ cyan ++ "  Tags (comma separated):\n  > " ++ reset
+  hFlush stdout
+  tagStr <- getLine
+  putStrLn $ cyan ++ "\n  Type: 1=Internship  2=Job  3=ResearchPosition" ++ reset
+  putStr $ cyan ++ "  > " ++ reset
+  hFlush stdout
+  typeStr <- getLine
+  let tags = parseTags tagStr
+      oppType = case typeStr of
+                  "1" -> Internship
+                  "3" -> ResearchPosition
+                  _   -> Job
+  fresh <- addWicJob (stateOpps state) title company desc url source tags oppType
+  putStrLn $ green ++ "\n  Added '" ++ title ++ "' as a WiC Pick!" ++ reset
+  pause
+  return (state { stateOpps = fresh, stateFiltered = fresh })
+
+removeWicJobUI :: AppState -> IO AppState
+removeWicJobUI state = do
+  clearScreen
+  putStrLn $ hotPink ++ bold ++ "\n  [ADMIN] Remove WiC Curated Job" ++ reset
+  putStrLn ""
+  let wicJobs = filter oppIsWicPick (stateOpps state)
+  if null wicJobs
+    then do
+      putStrLn $ gray ++ "  No WiC curated jobs to remove." ++ reset
+      pause
+      return state
+    else do
+      putStrLn $ cyan ++ "  Current WiC Picks:" ++ reset
+      putStrLn ""
+      mapM_ (\o -> putStrLn $ "  " ++ yellow ++ "[" ++ show (oppId o) ++ "]" ++ reset
+              ++ " " ++ oppTitle o ++ " @ " ++ oppCompany o) wicJobs
+      putStrLn ""
+      putStr $ cyan ++ "  Enter ID to remove:\n  > " ++ reset
+      hFlush stdout
+      idStr <- getLine
+      case reads idStr of
+        [(targetId, "")] -> do
+          fresh <- removeWicJob (stateOpps state) targetId
+          putStrLn $ green ++ "\n  Job removed!" ++ reset
+          pause
+          return (state { stateOpps = fresh, stateFiltered = fresh })
+        _ -> do
+          putStrLn $ red ++ "\n  Invalid ID." ++ reset
+          pause
+          return state    
+
 -- ══════════════════════════════════════════════════════════════
 -- HELPER FUNCTIONS
 -- ══════════════════════════════════════════════════════════════
@@ -627,3 +696,28 @@ emptyQuery = SearchQuery
   , queryType = Nothing
   , queryRemote = Nothing
   }
+
+parseTags :: String -> [Tag]
+parseTags s = [t | Just t <- map (parseTag . trim) (splitOn ',' s)]
+
+parseTag :: String -> Maybe Tag
+parseTag s = case map toLower s of
+  "software" -> Just Software
+  "research" -> Just Research
+  "remote" -> Just Remote
+  "inperson" -> Just InPerson
+  "paid" -> Just Paid
+  "unpaid" -> Just Unpaid
+  "parttime" -> Just PartTime
+  "fulltime" -> Just FullTime
+  _  -> Nothing
+
+splitOn :: Char -> String -> [String]
+splitOn _ "" = [""]
+splitOn c (x:xs)
+  | x == c    = "" : splitOn c xs
+  | otherwise = let (w:ws) = splitOn c xs in (x:w) : ws
+
+trim :: String -> String
+trim = f . f
+  where f = reverse . dropWhile (== ' ')  
