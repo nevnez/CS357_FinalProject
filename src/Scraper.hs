@@ -33,16 +33,6 @@ wicJobsFile = "wic-jobs.json"
 configFile :: FilePath
 configFile = "config.json"
 
--- USAJobs search terms — NM-focused
-usaJobsKeywords :: [String]
-usaJobsKeywords =
-  [ "computer scientist"
-  , "software engineer"
-  , "information technology"
-  , "cybersecurity"
-  , "data scientist"
-  ]
-
 -- CS-related keywords for filtering RemoteOK results
 -- FYI: All remote jobs so location doesnt matter
 csKeywords :: [String]
@@ -110,13 +100,7 @@ scrapeAll = do
   putStrLn "[Scraper] Fetching from RemoteOK..."
   remoteOpps <- scrapeRemoteOK
 
-  usaOpps <- case config of
-    Nothing -> do
-      putStrLn "[Scraper] Skipping USAJobs (no config.json)."
-      return []
-    Just cfg -> do
-      putStrLn "[Scraper] Fetching from USAJobs (New Mexico)..."
-      scrapeUSAJobs cfg
+  let usaOpps = []
 
   putStrLn "[Scraper] Loading WiC curated jobs..."
   wicOpps <- loadWicJobs
@@ -202,75 +186,6 @@ isCSRelevant opp =
    || Software `elem` oppTags opp
    || Research `elem` oppTags opp
 
--- USAJobs
-
-scrapeUSAJobs :: AppConfig -> IO [Opportunity]
-scrapeUSAJobs cfg = do
-  results <- mapM (fetchUSAJobs cfg) usaJobsKeywords
-  let opps = concat results
-  putStrLn ("[USAJobs] Got " ++ show (length opps) ++ " NM federal jobs.")
-  return opps
-
-fetchUSAJobs :: AppConfig -> String -> IO [Opportunity]
-fetchUSAJobs cfg keyword = do
-  let url = "https://data.usajobs.gov/api/search?Keyword="
-              ++ urlEncode keyword
-              ++ "&LocationName=New+Mexico&ResultsPerPage=25"
-  result <- catchIOError
-    (do req <- parseRequest url
-        let req' = setRequestHeader "Host" ["data.usajobs.gov"]
-                 $ setRequestHeader "User-Agent" [BSC.pack (usaJobsEmail cfg)]
-                 $ setRequestHeader "Authorization-Key" [BSC.pack (usaJobsApiKey cfg)]
-                 $ req
-        resp <- httpLBS req'
-        return (Right (getResponseBody resp)))
-    (\e -> return (Left (show e)))
-  case result of
-    Left err -> do
-      putStrLn ("[USAJobs] Failed for '" ++ keyword ++ "': " ++ err)
-      return []
-    Right body ->
-      case eitherDecode body of
-        Left err -> do
-          putStrLn ("[USAJobs] Parse error for '" ++ keyword ++ "': " ++ err)
-          return []
-        Right val ->
-          return (fromMaybe [] (parseMaybe extractUSAJobs val))
-
-extractUSAJobs :: Value -> Parser [Opportunity]
-extractUSAJobs (Object o) = do
-  result <- o .: "SearchResult"
-  items  <- result .: "SearchResultItems"
-  mapM parseUSAJob items
-extractUSAJobs _ = return []
-
-parseUSAJob :: Value -> Parser Opportunity
-parseUSAJob (Object o) = do
-  matched <- o .: "MatchedObjectDescriptor"
-  title <- matched .: "PositionTitle"
-  org <- matched .: "OrganizationName"
-  url <- matched .: "PositionURI"
-  locs <- matched .: "PositionLocation"
-  -- Pull location name from first location object
-  let loc = case locs of
-               (Object l : _) -> fromMaybe "New Mexico"
-                                    (parseMaybe (.: "LocationName") l)
-               _              -> "New Mexico"
-  let desc = "Federal position with " ++ org ++ " in " ++ loc
-                ++ ". Apply via USAJobs."
-  return Opportunity
-    { oppId = 0
-    , oppTitle = title
-    , oppCompany = org
-    , oppDescription = desc
-    , oppTags = [Paid, InPerson, FullTime, Software]
-    , oppType = Job
-    , oppDeadline = Nothing
-    , oppURL = url
-    , oppSource = "USAJobs"
-    , oppIsWicPick = False
-    }
-parseUSAJob _ = fail "Expected object"
 
 -- WiC Curated Jobs
 
